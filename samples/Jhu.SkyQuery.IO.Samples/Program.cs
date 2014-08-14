@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Data;
 using System.Data.SqlClient;
+using System.IO;
 using Jhu.Graywulf.Schema;
 using Jhu.Graywulf.Schema.SqlServer;
 using Jhu.Graywulf.Format;
@@ -11,6 +12,7 @@ using Jhu.Graywulf.IO;
 using Jhu.Graywulf.IO.Tasks;
 using Jhu.SkyQuery.Format;
 using Jhu.SkyQuery.IO;
+using Jhu.SharpFitsIO;
 
 namespace Jhu.SkyQuery.IO.Samples
 {
@@ -18,8 +20,9 @@ namespace Jhu.SkyQuery.IO.Samples
     {
         static void Main(string[] args)
         {
-            ExportSample();
-            ExportSample_Fits();
+            //ExportSample();
+            //ExportSample_Fits();
+            WriteFromReader();
 
             Console.ReadLine();
         }
@@ -126,6 +129,35 @@ namespace Jhu.SkyQuery.IO.Samples
             foreach (var result in task.Results)
             {
                 Console.WriteLine("{0} > {1} ({2} rows)", result.TableName, result.FileName, result.RecordsAffected);
+            }
+        }
+
+        static void WriteFromReader()
+        {
+            using (var cn = new SqlConnection(GetConnectionString()))
+            {
+                cn.Open();
+
+                using (var cmd = new SqlCommand("SELECT * FROM TestData", cn))
+                {
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        using (var fits = new FitsFile("test.fits", FitsFileMode.Write))
+                        {
+                            // Turn on optional buffering. Necessary to write recordsets.
+                            fits.IsBufferingAllowed = true;
+
+                            // Bintable cannot be the first, so write a dummy HDU
+                            var dummy = SimpleHdu.Create(fits, true, true, true);
+                            dummy.WriteHeader();
+
+                            var bintable = BinaryTableHdu.Create(fits, true);
+                            bintable.WriteFromDataReader(dr);
+
+                            Console.WriteLine("query > test.fits ({0} rows)", bintable.RowCount);
+                        }
+                    }
+                }
             }
         }
 
